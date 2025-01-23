@@ -1,0 +1,85 @@
+.arm
+start:
+	mov r3, #0x0D800000 @ first order of business: AHB access for thy power PC
+	ldr r0, [r3, #0x64]
+	orr r0, #0x8000000E
+	orr r0, #0x00000DF0
+	str r0, [r3, #0x64]
+
+	mov r0, #0x00000020
+	ldr r0, [r0, #4]
+	mov r1, #0
+	mov r2, #0
+	.long 0xE6000010 | (0x5b << 5) @ create object
+	cmp r0, #0
+	bne wefuckedup
+
+	mov r0, #0x00000020
+	ldr r0, [r0, #4]
+	ldr r0, [r0]
+	mov r1, #(1 << 0) | (1 << 1)
+	orr r1, #(1 << 15) @ PPCBOOT. this is me
+	.long 0xE6000010 | (0x71 << 5) @ set ownership
+	cmp r0, #0
+	bne wefuckedup
+
+	mov r0, #0x00000020
+	ldr r0, [r0, #4]
+	ldr r0, [r0]
+	mov r1, #0
+	mov r2, #4 @ Wii common key handle
+	mov r3, #1
+	mov r4, #0
+	adr r5, iv
+	adr r6, keydata
+	.long 0xE6000010 | (0x5d << 5) @ import secret key
+	cmp r0, #0
+	bne wefuckedup
+
+	mov r0, #0x00000020
+	ldr r6, [r0, #8]
+	cmp r6, #0
+	beq skip1
+	ldr r0, [r0, #4]
+	ldr r0, [r0]
+	mov r1, #0
+	mov r2, #0
+	mov r3, #1
+	mov r4, #0
+	mov r5, #0
+	.long 0xE6000010 | (0x5e << 5) @ export secret key
+	cmp r0, #0
+	bne wefuckedup
+	mov r0, r6
+	mov r1, #0x10
+	.long 0xE6000010 | (0x40 << 5) @ flush data cache
+
+skip1:
+	mov r0, #0x00000020
+	ldr r0, [r0, #4]
+	mov r1, #0x10
+	.long 0xE6000010 | (0x40 << 5) @ flush data cache
+	mov r0, #0x00000020
+	mov r1, #1
+	str r1, [r0]
+	mov r1, #4
+	.long 0xE6000010 | (0x40 << 5) @ flush data cache
+	bx lr
+
+wefuckedup:
+	mov r1, r0
+	mov r0, #0x00000020
+	mov r2, #2
+	str r2, [r0]
+	str r1, [r0, #4]
+	mov r1, #4
+	.long 0xE6000010 | (0x40 << 5) @ flush data cache
+	bx lr
+
+.pool
+.align 4
+keydata:
+	.word 0x6E18DB23, 0x847CBA6C, 0x1931A417, 0x9BAF8E09
+iv:
+	.word 0, 0, 0, 0
+
