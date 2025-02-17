@@ -1,85 +1,118 @@
+.macro syscall num
+	.long 0xE6000010 | (\num << 5)
+.endm
+
 .arm
+	b start
+signal:
+	.word 0
+ret:
+	.word 0
+keyhandles:
+	.word 0
+
 start:
-	mov r3, #0x0D800000 @ first order of business: AHB access for thy power PC
-	ldr r0, [r3, #0x64]
-	orr r0, #0x8000000E
-	orr r0, #0x00000DF0
-	str r0, [r3, #0x64]
+	mov r0, #0x0D800000	@ first order of business: AHB access for thy power PC
+	ldr r1, [r0, #0x60]
+	orr r1, #0x8
+	str r1, [r0, #0x60]
 
-	mov r0, #0x00000020
-	ldr r0, [r0, #4]
-	mov r1, #0
-	mov r2, #0
-	.long 0xE6000010 | (0x5b << 5) @ create object
+	ldr r1, [r0, #0x64]
+	orr r1, #0x8000000E
+	orr r1, #0x00000DF0
+	str r1, [r0, #0x64]
+
+	adr r0, signal
+	mov r1, #12
+	syscall 0x3F @ invalidate data cache
+
+thewait:
+	ldr r0, signal
+	cmp r0, #1
+	bne thewait
+
+	mcr p15, 0, r1, c7, c5, 1 @ kill instruction cache
+
+	ldr r12, keyhandles
+	add r0, r12, #8
+	mov r1, #0 @ private key
+	mov r2, #0 @ AES128
+	syscall 0x5B @ create object
 	cmp r0, #0
 	bne wefuckedup
 
-	mov r0, #0x00000020
-	ldr r0, [r0, #4]
-	ldr r0, [r0]
-	mov r1, #(1 << 0) | (1 << 1)
-	orr r1, #(1 << 15) @ PPCBOOT. this is me
-	.long 0xE6000010 | (0x71 << 5) @ set ownership
+	mov r0, r12
+	mov r1, #12
+	syscall 0x40 @ flush data cache
+
+	ldr r12, [r12, #8]
+	mov r0, r12
+	mov r1, #(1 << 1) @ ES!
+	syscall 0x71 @ set ownership
 	cmp r0, #0
 	bne wefuckedup
 
-	mov r0, #0x00000020
-	ldr r0, [r0, #4]
-	ldr r0, [r0]
+	mov r0, #0
+	mov r1, #0x40
+	mov r2, #0x20
+	syscall 0x19 @ IOS_AllocAligned(0, 0x40, 0x20)
+
+	cmp r0, #0
+	beq wefuckedup0
+
+	mov r6, r0
+	adr r0, keydata
+	ldm r0, {r1-r4}
+	stm r6, {r1-r4}
+
+	add r5, r6, #0x20
+	adr r0, iv
+	ldm r0, {r1-r4}
+	stm r5, {r1-r4}
+
+	mov r0, r12
 	mov r1, #0
 	mov r2, #4 @ Wii common key handle
-	mov r3, #1
-	mov r4, #0
-	adr r5, iv
-	adr r6, keydata
-	.long 0xE6000010 | (0x5d << 5) @ import secret key
+	mov r3, #1 @ Flags (decrypt)
+	str r1, [sp, #0x0] @signbuffer
+	str r5, [sp, #0x4] @iv
+	str r6, [sp, #0x8] @keybuffer
+
+	syscall 0x5D @ import secret key
 	cmp r0, #0
 	bne wefuckedup
 
-	mov r0, #0x00000020
-	ldr r6, [r0, #8]
-	cmp r6, #0
-	beq skip1
-	ldr r0, [r0, #4]
-	ldr r0, [r0]
-	mov r1, #0
+	mov r0, #0
+	mov r1, r6
+	syscall 0x1A @ IOS_Free(0, ptr)
+	cmp r0, #0
+	bne wefuckedup
+
+finish:
+	adr r1, signal
 	mov r2, #0
-	mov r3, #1
-	mov r4, #0
-	mov r5, #0
-	.long 0xE6000010 | (0x5e << 5) @ export secret key
-	cmp r0, #0
-	bne wefuckedup
-	mov r0, r6
-	mov r1, #0x10
-	.long 0xE6000010 | (0x40 << 5) @ flush data cache
+	str r2, [r1]
+	b realexit
 
-skip1:
-	mov r0, #0x00000020
-	ldr r0, [r0, #4]
-	mov r1, #0x10
-	.long 0xE6000010 | (0x40 << 5) @ flush data cache
-	mov r0, #0x00000020
-	mov r1, #1
-	str r1, [r0]
-	mov r1, #4
-	.long 0xE6000010 | (0x40 << 5) @ flush data cache
-	bx lr
+wefuckedup0:
+	mov r0, #-1
 
 wefuckedup:
-	mov r1, r0
-	mov r0, #0x00000020
+	adr r1, signal
 	mov r2, #2
-	str r2, [r0]
-	str r1, [r0, #4]
-	mov r1, #4
-	.long 0xE6000010 | (0x40 << 5) @ flush data cache
+	str r0, [r1, #4]
+	str r2, [r1]
+
+realexit:
+	adr r0, signal
+	mov r1, #8
+	syscall 0x40 @ flush data cache
 	bx lr
 
 .pool
-.align 4
 keydata:
 	.word 0x6E18DB23, 0x847CBA6C, 0x1931A417, 0x9BAF8E09
+@	.word 0x30bfc76e, 0x7c19afbb, 0x23163330, 0xced7c28d
 iv:
 	.word 0, 0, 0, 0
 

@@ -25,7 +25,7 @@ INCLUDES	:=
 # options for code generation
 #---------------------------------------------------------------------------------
 
-CFLAGS	= -g -O2 -Wall $(MACHDEP) $(INCLUDE)
+CFLAGS	= -g -O2 -Wall $(MACHDEP) $(INCLUDE) -D_GNU_SOURCE
 CXXFLAGS	=	$(CFLAGS)
 
 LDFLAGS	=	-g $(MACHDEP) -Wl,-Map,$(notdir $@).map
@@ -128,6 +128,22 @@ $(OFILES_SOURCES) : $(HFILES)
 #---------------------------------------------------------------------------------
 %.bin.o	%_bin.h :	%.bin
 #---------------------------------------------------------------------------------
+	@echo $(notdir $<)
+	$(bin2o)
+
+%.tik.o %_tik.h:	%.tik
+	@echo $(notdir $<)
+	$(bin2o)
+
+%.certs.o %_certs.h:	%.certs
+	@echo $(notdir $<)
+	$(bin2o)
+
+%.tmd.o %_tmd.h:	%.tmd
+	@echo $(notdir $<)
+	$(bin2o)
+
+%.app.o %_app.h:	%.app
 	@echo $(notdir $<)
 	$(bin2o)
 
